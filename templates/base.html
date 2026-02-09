@@ -1,0 +1,52 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro e Cálculo - FUNDEF Terra Nova-PE</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="container">
+        <header class="topo">
+            <p class="subtitulo-municipio">Município de Terra Nova/PE</p>
+            <h1>Cadastro e Cálculo dos Meses Trabalhados - Precatórios FUNDEF</h1>
+            <nav>
+                <a href="{{ url_for('index') }}">Início</a>
+                <a href="{{ url_for('cadastro') }}">Novo cadastro e cálculo</a>
+                <a href="{{ url_for('rateio') }}">Rateio dos precatórios</a>
+                <a href="{{ url_for('exportar_excel') }}">Exportar Excel</a>
+            </nav>
+        </header>
+
+        <section class="card-fundef" aria-label="Card Precatórios do FUNDEF">
+            <div class="card-fundef-conteudo">
+                <p>PRECATÓRIOS DO</p>
+                <h2>FUNDEF</h2>
+            </div>
+            <div class="card-fundef-faixa" aria-hidden="true">
+                <span class="f1"></span>
+                <span class="f2"></span>
+                <span class="f3"></span>
+                <span class="f4"></span>
+                <span class="f5"></span>
+                <span class="f6"></span>
+                <span class="f7"></span>
+                <span class="f8"></span>
+            </div>
+        </section>
+
+        {% with mensagens = get_flashed_messages(with_categories=true) %}
+            {% if mensagens %}
+                <section class="mensagens">
+                    {% for categoria, mensagem in mensagens %}
+                        <p class="msg {{ categoria }}">{{ mensagem }}</p>
+                    {% endfor %}
+                </section>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

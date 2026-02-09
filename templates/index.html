@@ -1,0 +1,98 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<section class="card">
+    <div class="header-lista">
+        <h2>Cadastros e cálculos realizados</h2>
+    </div>
+
+    {% if professores %}
+    <div class="tabela-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nome</th>
+                    <th>CPF</th>
+                    <th>Local de Trabalho</th>
+                    <th>Cargo</th>
+                    <th>Situação</th>
+                    <th>Telefone</th>
+                    <th>E-mail</th>
+                    <th>Data</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in professores %}
+                <tr>
+                    <td>{{ p.id }}</td>
+                    <td>{{ p.nome }}</td>
+                    <td>{{ p.cpf }}</td>
+                    <td>{{ p.escola }}</td>
+                    <td>{{ p.cargo }}</td>
+                    <td>{{ p.situacao_servidor or "Ativo" }}</td>
+                    <td>{{ p.telefone }}</td>
+                    <td>{{ p.email }}</td>
+                    <td>{{ p.criado_em }}</td>
+                    <td>
+                        <div class="acoes-tabela">
+                            <a class="botao pequeno secundario" href="{{ url_for('editar', professor_id=p.id) }}">Editar</a>
+                            <form method="post" action="{{ url_for('deletar', professor_id=p.id) }}" class="form-inline" onsubmit="return confirm('Tem certeza de que deseja excluir este cadastro?');">
+                                <button type="submit" class="botao pequeno perigo">Excluir</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p>Nenhum cadastro encontrado. Clique em "Novo cadastro e cálculo" para iniciar.</p>
+    {% endif %}
+</section>
+
+<section class="card">
+    <div class="header-lista">
+        <h2>Rascunhos pendentes</h2>
+    </div>
+
+    {% if rascunhos %}
+    <div class="tabela-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nome</th>
+                    <th>CPF</th>
+                    <th>Criado em</th>
+                    <th>Atualizado em</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rascunhos %}
+                <tr>
+                    <td>{{ r.id }}</td>
+                    <td>{{ r.nome_referencia or "Sem nome" }}</td>
+                    <td>{{ r.cpf or "-" }}</td>
+                    <td>{{ r.criado_em }}</td>
+                    <td>{{ r.atualizado_em }}</td>
+                    <td>
+                        <div class="acoes-tabela">
+                            <a class="botao pequeno secundario" href="{{ url_for('cadastro', rascunho_id=r.id) }}">Continuar</a>
+                            <form method="post" action="{{ url_for('deletar_rascunho', rascunho_id=r.id) }}" class="form-inline" onsubmit="return confirm('Excluir este rascunho?');">
+                                <button type="submit" class="botao pequeno perigo">Excluir</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p>Nenhum rascunho pendente no momento.</p>
+    {% endif %}
+</section>
+{% endblock %}

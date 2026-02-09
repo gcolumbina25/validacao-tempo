@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+    <h2>Rateio dos precatórios</h2>
+    <p class="texto-ajuda">
+        Cadastros disponíveis para rateio: <strong>{{ quantidade_professores }}</strong>.
+    </p>
+
+    <form method="post" class="form-grid">
+        <label>Valor total do precatório (R$)
+            <input
+                type="text"
+                name="valor_total"
+                value="{{ dados_form.get('valor_total', '') }}"
+                placeholder="Ex.: 1500000,00"
+                required
+            >
+            <small class="campo-observacao">
+                Valor padrão já preenchido conforme o precatório. Altere manualmente apenas em caso de juros e correções monetárias.
+            </small>
+        </label>
+
+        <label>Critério de rateio
+            <input type="text" value="Meses trabalhados" readonly>
+        </label>
+
+        <div class="full acoes">
+            <button type="submit" class="botao">Calcular rateio</button>
+            <a class="botao secundario" href="{{ url_for('rateio') }}">Limpar</a>
+        </div>
+    </form>
+</section>
+
+{% if resumo_rateio %}
+<section class="card card-rateio-resumo">
+    <h3>Resumo do cálculo</h3>
+    <div class="resumo-rateio">
+        <p><strong>Critério:</strong> {{ resumo_rateio.criterio_texto }}</p>
+        <p><strong>Valor total informado:</strong> {{ resumo_rateio.valor_total | moeda_br }}</p>
+        <p><strong>Valor distribuído:</strong> {{ resumo_rateio.valor_disponivel_rateio | moeda_br }}</p>
+        <p><strong>Soma dos pesos:</strong> {{ resumo_rateio.soma_pesos }}</p>
+    </div>
+</section>
+{% endif %}
+
+{% if resultado_rateio %}
+<section class="card">
+    <h3>Detalhamento por professor</h3>
+    <div class="tabela-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nome</th>
+                    <th>CPF</th>
+                    <th>Local de Trabalho</th>
+                    <th>Cargo</th>
+                    <th>Situação</th>
+                    <th>Meses</th>
+                    <th>Peso</th>
+                    <th>Valor do rateio</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in resultado_rateio %}
+                <tr>
+                    <td>{{ item.id }}</td>
+                    <td>{{ item.nome }}</td>
+                    <td>{{ item.cpf }}</td>
+                    <td>{{ item.escola }}</td>
+                    <td>{{ item.cargo }}</td>
+                    <td>{{ item.situacao_servidor or "Ativo" }}</td>
+                    <td>{{ item.meses }}</td>
+                    <td>{{ item.peso }}</td>
+                    <td><strong>{{ item.valor_rateio | moeda_br }}</strong></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+{% endblock %}

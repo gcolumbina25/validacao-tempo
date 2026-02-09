@@ -1,0 +1,244 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<section class="card">
+    {% if modo == "editar" %}
+    <h2>Editar cadastro e cálculo de meses</h2>
+    {% else %}
+    <h2>Novo cadastro e cálculo de meses</h2>
+    {% endif %}
+    <form method="post" class="form-grid">
+        {% if modo == "novo" %}
+        <input type="hidden" name="rascunho_id" value="{{ rascunho_id or '' }}">
+        {% endif %}
+        <p class="full aviso-vigencia-fundef">
+            Vigência do FUNDEF: a data inicial e a data final devem estar no período de
+            <strong>01/01/1997</strong> a <strong>31/12/2006</strong>.
+        </p>
+        {% if modo == "novo" and rascunho_id %}
+        <p class="full aviso-rascunho">
+            Editando rascunho #{{ rascunho_id }}{% if rascunho_atualizado_em %} (última atualização: {{ rascunho_atualizado_em }}){% endif %}.
+        </p>
+        {% endif %}
+        <p id="aviso_datas_fundef" class="full aviso-data-invalida" hidden></p>
+        <label>Nome completo
+            <input type="text" name="nome" value="{{ dados.get('nome', '') }}" required>
+        </label>
+
+        <label>CPF
+            <input type="text" name="cpf" value="{{ dados.get('cpf', '') }}" placeholder="Somente números" required>
+        </label>
+
+        <label>RG
+            <input type="text" name="rg" value="{{ dados.get('rg', '') }}">
+        </label>
+
+        <label>Matrícula
+            <input type="text" name="matricula" value="{{ dados.get('matricula', '') }}">
+        </label>
+
+        <label>Local de Trabalho
+            <select name="escola" required>
+                <option value="">Selecione</option>
+                <option value="Escola" {% if dados.get('escola') == 'Escola' %}selected{% endif %}>Escola</option>
+                <option value="Seduc" {% if dados.get('escola') == 'Seduc' %}selected{% endif %}>Seduc</option>
+            </select>
+        </label>
+
+        <label>Cargo
+            <input type="text" name="cargo" value="{{ dados.get('cargo', '') }}" required>
+        </label>
+
+        <fieldset class="grupo-opcoes">
+            <legend>Situação do servidor</legend>
+            <label class="opcao-radio">
+                <input
+                    type="radio"
+                    name="situacao_servidor"
+                    value="Ativo"
+                    {% if dados.get('situacao_servidor', 'Ativo') == 'Ativo' %}checked{% endif %}
+                    required
+                >
+                Ativo
+            </label>
+            <label class="opcao-radio">
+                <input
+                    type="radio"
+                    name="situacao_servidor"
+                    value="Aposentado"
+                    {% if dados.get('situacao_servidor') == 'Aposentado' %}checked{% endif %}
+                >
+                Aposentado
+            </label>
+            <label class="opcao-radio">
+                <input
+                    type="radio"
+                    name="situacao_servidor"
+                    value="Falecido"
+                    {% if dados.get('situacao_servidor') == 'Falecido' %}checked{% endif %}
+                >
+                Falecido
+            </label>
+            <label class="opcao-radio">
+                <input
+                    type="radio"
+                    name="situacao_servidor"
+                    value="Sem vínculo"
+                    {% if dados.get('situacao_servidor') == 'Sem vínculo' %}checked{% endif %}
+                >
+                Sem vínculo
+            </label>
+        </fieldset>
+
+        <label>Data de admissão
+            <input type="date" name="data_admissao" value="{{ dados.get('data_admissao', '') }}" required>
+        </label>
+
+        <label>Telefone
+            <input type="text" name="telefone" value="{{ dados.get('telefone', '') }}">
+        </label>
+
+        <label>E-mail
+            <input type="email" name="email" value="{{ dados.get('email', '') }}">
+        </label>
+
+        <label>Endereço
+            <input type="text" name="endereco" value="{{ dados.get('endereco', '') }}" required>
+        </label>
+
+        <label>Banco
+            <input type="text" name="banco" value="{{ dados.get('banco', '') }}" required>
+        </label>
+
+        <label>Agência
+            <input type="text" name="agencia" value="{{ dados.get('agencia', '') }}" required>
+        </label>
+
+        <label>Conta
+            <input type="text" name="conta" value="{{ dados.get('conta', '') }}" required>
+        </label>
+
+        <label>Tipo de conta
+            <select name="tipo_conta" required>
+                <option value="">Selecione</option>
+                <option value="corrente" {% if dados.get('tipo_conta') == 'corrente' %}selected{% endif %}>Corrente</option>
+                <option value="poupanca" {% if dados.get('tipo_conta') == 'poupanca' %}selected{% endif %}>Poupança</option>
+            </select>
+        </label>
+
+        <label>Data inicial do FUNDEF
+            <input type="date" name="data_inicio_fundef" value="{{ dados.get('data_inicio_fundef', '') }}" min="1997-01-01" max="2006-12-31" required>
+        </label>
+
+        <label>Data final do FUNDEF
+            <input type="date" name="data_fim_fundef" value="{{ dados.get('data_fim_fundef', '') }}" min="1997-01-01" max="2006-12-31" required>
+        </label>
+
+        <label>Quantidade de meses trabalhados
+            <input type="number" id="quantidade_meses_trabalhados" value="{{ dados.get('quantidade_meses_trabalhados', '') }}" min="1" max="120" readonly>
+        </label>
+
+        <label class="full checkbox">
+            <input type="checkbox" name="aceitou_declaracao" {% if dados.get('aceitou_declaracao') %}checked{% endif %}>
+            Declaro que as informações prestadas são verdadeiras.
+        </label>
+
+        <div class="full acoes">
+            {% if modo == "editar" %}
+            <button type="submit" class="botao">Salvar alterações</button>
+            {% else %}
+            <button type="submit" class="botao" name="acao" value="salvar_cadastro">Concluir cadastro</button>
+            <button type="submit" class="botao secundario" name="acao" value="salvar_rascunho" formnovalidate>Salvar alterações</button>
+            {% endif %}
+            <a class="botao secundario" href="{{ url_for('index') }}">Cancelar</a>
+        </div>
+    </form>
+</section>
+<script>
+    (function () {
+        const inicio = document.querySelector('input[name="data_inicio_fundef"]');
+        const fim = document.querySelector('input[name="data_fim_fundef"]');
+        const meses = document.getElementById('quantidade_meses_trabalhados');
+        const avisoDatas = document.getElementById('aviso_datas_fundef');
+        const form = document.querySelector('form.form-grid');
+        const limiteMinimo = '1997-01-01';
+        const limiteMaximo = '2006-12-31';
+
+        function calcularMeses() {
+            if (!inicio || !fim || !meses) return;
+            if (!inicio.value || !fim.value) {
+                meses.value = '';
+                return;
+            }
+
+            const dataInicio = new Date(inicio.value + 'T00:00:00');
+            const dataFim = new Date(fim.value + 'T00:00:00');
+
+            if (Number.isNaN(dataInicio.getTime()) || Number.isNaN(dataFim.getTime()) || dataInicio > dataFim) {
+                meses.value = '';
+                return;
+            }
+
+            const totalMeses = (dataFim.getFullYear() - dataInicio.getFullYear()) * 12
+                + (dataFim.getMonth() - dataInicio.getMonth()) + 1;
+            meses.value = String(totalMeses);
+        }
+
+        function validarPeriodoFundef() {
+            if (!inicio || !fim || !avisoDatas) return true;
+
+            let mensagemErro = '';
+            const inicioPreenchido = Boolean(inicio.value);
+            const fimPreenchido = Boolean(fim.value);
+
+            if (inicioPreenchido && (inicio.value < limiteMinimo || inicio.value > limiteMaximo)) {
+                mensagemErro = 'A data inicial do FUNDEF deve estar entre 01/01/1997 e 31/12/2006.';
+            } else if (fimPreenchido && (fim.value < limiteMinimo || fim.value > limiteMaximo)) {
+                mensagemErro = 'A data final do FUNDEF deve estar entre 01/01/1997 e 31/12/2006.';
+            } else if (inicioPreenchido && fimPreenchido && inicio.value > fim.value) {
+                mensagemErro = 'A data inicial do FUNDEF não pode ser maior que a data final.';
+            }
+
+            if (mensagemErro) {
+                avisoDatas.textContent = `${mensagemErro} Não é possível continuar sem corrigir.`;
+                avisoDatas.hidden = false;
+                inicio.setCustomValidity('Período do FUNDEF inválido.');
+                fim.setCustomValidity('Período do FUNDEF inválido.');
+                return false;
+            }
+
+            avisoDatas.textContent = '';
+            avisoDatas.hidden = true;
+            inicio.setCustomValidity('');
+            fim.setCustomValidity('');
+            return true;
+        }
+
+        function atualizarValidacoes() {
+            const periodoValido = validarPeriodoFundef();
+            if (periodoValido) calcularMeses();
+            else meses.value = '';
+        }
+
+        if (inicio) {
+            inicio.addEventListener('input', atualizarValidacoes);
+            inicio.addEventListener('change', atualizarValidacoes);
+        }
+
+        if (fim) {
+            fim.addEventListener('input', atualizarValidacoes);
+            fim.addEventListener('change', atualizarValidacoes);
+        }
+
+        if (form) {
+            form.addEventListener('submit', function (evento) {
+                const botaoAcionado = evento.submitter;
+                const salvandoRascunho = Boolean(botaoAcionado && botaoAcionado.value === 'salvar_rascunho');
+                if (!salvandoRascunho && !validarPeriodoFundef()) {
+                    evento.preventDefault();
+                }
+            });
+        }
+        atualizarValidacoes();
+    })();
+</script>
+{% endblock %}
