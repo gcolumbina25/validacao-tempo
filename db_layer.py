@@ -174,7 +174,10 @@ else:
     DATABASE_PATH = DATA_DIR / "fundef.db"
 
     def get_connection() -> sqlite3.Connection:
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        try:
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+        except (OSError, IOError):
+            pass  # Ignore if filesystem is read-only
         connection = sqlite3.connect(DATABASE_PATH)
         connection.row_factory = sqlite3.Row
         return connection

@@ -481,7 +481,12 @@ def remover_rascunho(rascunho_id: int) -> None:
     return db_remover_rascunho(rascunho_id)
 
 
-db_init()
+# Initialize DB only if not using Firestore and not in read-only environment
+if not USE_FIREBASE:
+    try:
+        db_init()
+    except (OSError, IOError):
+        pass  # Ignore if filesystem is read-only (Vercel) or no permission
 
 
 @app.route("/")
