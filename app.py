@@ -482,6 +482,7 @@ def remover_rascunho(rascunho_id: int) -> None:
 
 
 # Initialize DB only if not using Firestore and not in read-only environment
+# Skip initialization for Vercel read-only filesystem (use Firestore instead)
 if not USE_FIREBASE:
     try:
         db_init()
