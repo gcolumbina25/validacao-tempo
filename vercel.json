@@ -1,0 +1,8 @@
+{
+  "buildCommand": "pip install --break-system-packages -r requirements.txt",
+  "functions": {
+    "api/index.py": {
+      "runtime": "python3.12"
+    }
+  }
+}
