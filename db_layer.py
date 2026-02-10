@@ -11,6 +11,7 @@ if USE_FIREBASE:
     from firebase_admin import credentials, firestore
     import json
     import tempfile
+    import base64
 
     cred = None
     
@@ -19,18 +20,24 @@ if USE_FIREBASE:
     if cred_path and os.path.isfile(cred_path):
         cred = credentials.Certificate(cred_path)
     
-    # Tenta carregar credenciais de variável JSON (Vercel/prod)
+    # Tenta carregar credenciais de variável JSON ou base64 (Vercel/prod)
     if not cred:
         cred_json = os.environ.get("FIREBASE_CREDENTIALS_JSON")
         if cred_json:
             try:
-                # Se for string JSON, decodifica e salva em temp
-                cred_dict = json.loads(cred_json)
+                # Tenta decodificar como base64 primeiro
+                try:
+                    decoded = base64.b64decode(cred_json).decode('utf-8')
+                    cred_dict = json.loads(decoded)
+                except Exception:
+                    # Se falhar, tenta direto como JSON
+                    cred_dict = json.loads(cred_json)
+                
                 with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
                     json.dump(cred_dict, f)
                     temp_cred_path = f.name
                 cred = credentials.Certificate(temp_cred_path)
-            except (json.JSONDecodeError, ValueError) as e:
+            except (json.JSONDecodeError, ValueError, base64.binascii.Error) as e:
                 print(f"Erro ao decodificar FIREBASE_CREDENTIALS_JSON: {e}")
     
     # Se nenhuma credencial explícita, tenta Application Default Credentials
