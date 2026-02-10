@@ -1,1 +1,2 @@
-web: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
+# Configuração removida - usar vercel.json para Vercel
+# Este arquivo era para Render. Se precisar voltar para Render, restaure o conteúdo original.

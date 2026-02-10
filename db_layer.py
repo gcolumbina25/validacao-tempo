@@ -4,6 +4,8 @@ import os
 from datetime import datetime
 from typing import Any
 
+# Padrão para desenvolvimento local é SQLite (USE_FIREBASE=0)
+# Vercel sobrescreve com USE_FIREBASE=1 via vercel.json
 USE_FIREBASE = os.environ.get("USE_FIREBASE", "0") == "1"
 
 if USE_FIREBASE:
@@ -14,11 +16,16 @@ if USE_FIREBASE:
     import base64
 
     cred = None
+    firebase_initialized = False
     
     # Tenta carregar credenciais de arquivo (local dev)
     cred_path = os.environ.get("FIREBASE_CREDENTIALS")
     if cred_path and os.path.isfile(cred_path):
-        cred = credentials.Certificate(cred_path)
+        try:
+            cred = credentials.Certificate(cred_path)
+            print("[Firebase] Credenciais carregadas de arquivo local")
+        except Exception as e:
+            print(f"[Firebase] Erro ao carregar credenciais de arquivo: {e}")
     
     # Tenta carregar credenciais de variável JSON ou base64 (Vercel/prod)
     if not cred:
@@ -29,30 +36,40 @@ if USE_FIREBASE:
                 try:
                     decoded = base64.b64decode(cred_json).decode('utf-8')
                     cred_dict = json.loads(decoded)
+                    print("[Firebase] Credenciais decodificadas de base64")
                 except Exception:
                     # Se falhar, tenta direto como JSON
                     cred_dict = json.loads(cred_json)
+                    print("[Firebase] Credenciais carregadas como JSON")
                 
                 with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
                     json.dump(cred_dict, f)
                     temp_cred_path = f.name
                 cred = credentials.Certificate(temp_cred_path)
             except (json.JSONDecodeError, ValueError, base64.binascii.Error) as e:
-                print(f"Erro ao decodificar FIREBASE_CREDENTIALS_JSON: {e}")
+                print(f"[Firebase] Erro ao decodificar FIREBASE_CREDENTIALS_JSON: {e}")
     
     # Se nenhuma credencial explícita, tenta Application Default Credentials
     if cred:
         try:
             firebase_admin.initialize_app(cred)
-        except ValueError:
-            pass
+            firebase_initialized = True
+            print("[Firebase] Aplicativo inicializado com sucesso")
+        except ValueError as e:
+            print(f"[Firebase] Erro ao inicializar com credenciais: {e}")
     else:
         try:
             firebase_admin.initialize_app()
-        except ValueError:
-            pass
+            firebase_initialized = True
+            print("[Firebase] Aplicativo inicializado com Application Default Credentials")
+        except ValueError as e:
+            print(f"[Firebase] Erro ao inicializar: {e}")
 
-    db = firestore.client()
+    if firebase_initialized:
+        db = firestore.client()
+        print("[Firebase] Cliente Firestore criado com sucesso")
+    else:
+        print("[Firebase] AVISO: Não foi possível inicializar Firebase!")
 
 
 def _now_str() -> str:
