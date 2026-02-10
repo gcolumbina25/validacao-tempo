@@ -43,6 +43,36 @@ Este projeto já está pronto para deploy via `render.yaml`.
 - `DATA_DIR`: diretório para persistência do banco (`/var/data` no Render).
 - `PORT`: porta de execução (gerenciada automaticamente no Render).
 - `FLASK_DEBUG`: use `1` apenas em ambiente local.
+- `USE_FIREBASE`: defina como `1` para usar Firestore (padrão: `0` usa SQLite).
+- `FIREBASE_CREDENTIALS`: caminho do `serviceAccount.json` (desenvolvimento local).
+- `FIREBASE_CREDENTIALS_JSON`: JSON base64 do `serviceAccount.json` (Vercel/produção).
+
+## Firebase + Firestore
+
+Por padrão, a aplicação usa **SQLite** local. Para usar **Firebase Firestore**:
+
+### Desenvolvimento local
+1. Obtenha `serviceAccount.json` do Firebase Console (Configurações → Contas de Serviço)
+2. Coloque em `/serviceAccount.json` na raiz do projeto
+3. Exporte variáveis:
+   ```bash
+   export USE_FIREBASE=1
+   export FIREBASE_CREDENTIALS=/workspaces/validacao-tempo/serviceAccount.json
+   python app.py
+   ```
+
+### Deploy em Vercel / Produção
+1. Gere credenciais em base64:
+   ```bash
+   python scripts/encode_firebase_credentials.py
+   ```
+2. Copie o valor gerado
+3. Em Vercel Dashboard → Project Settings → Environment Variables, adicione:
+   - `USE_FIREBASE` = `1`
+   - `FIREBASE_CREDENTIALS_JSON` = *(valor base64)*
+
+Veja [SETUP_FIREBASE.md](SETUP_FIREBASE.md) para instruções detalhadas.
+
 
 ## Funcionalidades
 - Cadastro de professores com validação de dados

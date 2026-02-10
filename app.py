@@ -92,6 +92,24 @@ FORM_FIELDS = [
     "aceitou_declaracao",
 ]
 
+# camada de dados (SQLite por padrão, Firestore se USE_FIREBASE=1)
+from db_layer import (
+    USE_FIREBASE,
+    init_db as db_init,
+    list_professores as db_list_professores,
+    list_rascunhos as db_list_rascunhos,
+    find_professor_by_cpf as db_find_professor_by_cpf,
+    get_professor as db_get_professor,
+    insert_professor as db_insert_professor,
+    update_professor as db_update_professor,
+    delete_professor as db_delete_professor,
+    save_rascunho as db_save_rascunho,
+    carregar_rascunho as db_carregar_rascunho,
+    remover_rascunho as db_remover_rascunho,
+    export_professores as db_export_professores,
+    get_professores_for_rateio as db_professores_rateio,
+)
+
 
 def get_connection() -> sqlite3.Connection:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -436,73 +454,17 @@ def tentar_calcular_meses_validos(dados: dict[str, str]) -> int | None:
 def salvar_rascunho_cadastro(dados: dict[str, str], rascunho_id: int | None = None) -> int:
     payload = {campo: dados.get(campo, "") for campo in FORM_FIELDS}
     payload["carga_horaria"] = str(CARGA_HORARIA_SEMANAL_FIXA)
-    agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    nome_referencia = payload.get("nome", "").strip()
-    cpf = only_digits(payload.get("cpf", ""))
-
-    with get_connection() as conn:
-        if rascunho_id is not None:
-            existente = conn.execute(
-                "SELECT id FROM rascunhos_professores WHERE id = ?",
-                (rascunho_id,),
-            ).fetchone()
-            if existente:
-                conn.execute(
-                    """
-                    UPDATE rascunhos_professores
-                    SET nome_referencia = ?, cpf = ?, dados_json = ?, atualizado_em = ?
-                    WHERE id = ?
-                    """,
-                    (
-                        nome_referencia,
-                        cpf,
-                        json.dumps(payload, ensure_ascii=False),
-                        agora,
-                        rascunho_id,
-                    ),
-                )
-                return rascunho_id
-
-        cursor = conn.execute(
-            """
-            INSERT INTO rascunhos_professores (
-                nome_referencia, cpf, dados_json, criado_em, atualizado_em
-            ) VALUES (?, ?, ?, ?, ?)
-            """,
-            (
-                nome_referencia,
-                cpf,
-                json.dumps(payload, ensure_ascii=False),
-                agora,
-                agora,
-            ),
-        )
-        return int(cursor.lastrowid)
+    # usa camada de dados (Firestore ou SQLite)
+    return db_save_rascunho(payload, rascunho_id)
 
 
 def carregar_rascunho_cadastro(rascunho_id: int) -> dict[str, object] | None:
-    with get_connection() as conn:
-        rascunho = conn.execute(
-            """
-            SELECT id, dados_json, criado_em, atualizado_em
-            FROM rascunhos_professores
-            WHERE id = ?
-            """,
-            (rascunho_id,),
-        ).fetchone()
-
-    if not rascunho:
+    r = db_carregar_rascunho(rascunho_id)
+    if not r:
         return None
 
+    payload = r.get("dados") if isinstance(r.get("dados"), dict) else r.get("dados", {})
     dados: dict[str, str] = {}
-    try:
-        payload = json.loads(rascunho["dados_json"])
-    except json.JSONDecodeError:
-        payload = {}
-
-    if not isinstance(payload, dict):
-        payload = {}
-
     for campo in FORM_FIELDS:
         valor = payload.get(campo, "")
         if campo == "aceitou_declaracao":
@@ -512,39 +474,37 @@ def carregar_rascunho_cadastro(rascunho_id: int) -> dict[str, object] | None:
         dados[campo] = str(valor).strip() if valor is not None else ""
 
     dados["carga_horaria"] = str(CARGA_HORARIA_SEMANAL_FIXA)
-    return {
-        "id": rascunho["id"],
-        "dados": dados,
-        "criado_em": rascunho["criado_em"],
-        "atualizado_em": rascunho["atualizado_em"],
-    }
+    return {"id": r.get("id"), "dados": dados, "criado_em": r.get("criado_em"), "atualizado_em": r.get("atualizado_em")}
 
 
 def remover_rascunho(rascunho_id: int) -> None:
-    with get_connection() as conn:
-        conn.execute("DELETE FROM rascunhos_professores WHERE id = ?", (rascunho_id,))
+    return db_remover_rascunho(rascunho_id)
 
 
-init_db()
+db_init()
 
 
 @app.route("/")
 def index() -> str:
-    with get_connection() as conn:
-        professores = conn.execute(
-            """
-            SELECT id, nome, cpf, escola, cargo, situacao_servidor, telefone, email, criado_em
-            FROM professores
-            ORDER BY id DESC
-            """
-        ).fetchall()
-        rascunhos = conn.execute(
-            """
-            SELECT id, nome_referencia, cpf, atualizado_em, criado_em
-            FROM rascunhos_professores
-            ORDER BY datetime(atualizado_em) DESC, id DESC
-            """
-        ).fetchall()
+    if USE_FIREBASE:
+        professores = db_list_professores()
+        rascunhos = db_list_rascunhos()
+    else:
+        with get_connection() as conn:
+            professores = conn.execute(
+                """
+                SELECT id, nome, cpf, escola, cargo, situacao_servidor, telefone, email, criado_em
+                FROM professores
+                ORDER BY id DESC
+                """
+            ).fetchall()
+            rascunhos = conn.execute(
+                """
+                SELECT id, nome_referencia, cpf, atualizado_em, criado_em
+                FROM rascunhos_professores
+                ORDER BY datetime(atualizado_em) DESC, id DESC
+                """
+            ).fetchall()
     return render_template("index.html", professores=professores, rascunhos=rascunhos)
 
 
@@ -570,12 +530,9 @@ def cadastro() -> str:
             dados["quantidade_meses_trabalhados"] = str(meses_calculados)
 
         if not erros:
-            with get_connection() as conn:
-                existente = conn.execute(
-                    "SELECT id FROM professores WHERE cpf = ?", (cpf_limpo,)
-                ).fetchone()
-                if existente:
-                    erros.append("Já existe um cadastro com este CPF.")
+            existente = db_find_professor_by_cpf(cpf_limpo)
+            if existente:
+                erros.append("Já existe um cadastro com este CPF.")
 
         if meses_calculados is None and not erros:
             erros.append("Não foi possível calcular a quantidade de meses trabalhados.")
@@ -592,91 +549,17 @@ def cadastro() -> str:
                 rascunho_atualizado_em=None,
             )
 
-        with get_connection() as conn:
-            colunas = get_table_columns(conn, "professores")
-            tem_anos_legado = {"ano_inicio_fundef", "ano_fim_fundef"}.issubset(colunas)
-
-            if tem_anos_legado:
-                conn.execute(
-                    """
-                    INSERT INTO professores (
-                        nome, cpf, rg, matricula, escola, cargo,
-                        situacao_servidor,
-                        data_admissao, telefone, email, endereco,
-                        banco, agencia, conta, tipo_conta,
-                        ano_inicio_fundef, ano_fim_fundef,
-                        data_inicio_fundef, data_fim_fundef,
-                        carga_horaria, quantidade_meses_trabalhados,
-                        aceitou_declaracao, criado_em
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        dados["nome"],
-                        dados["cpf"],
-                        dados["rg"],
-                        dados["matricula"],
-                        dados["escola"],
-                        dados["cargo"],
-                        dados["situacao_servidor"],
-                        dados["data_admissao"],
-                        only_digits(dados["telefone"]),
-                        dados["email"],
-                        dados["endereco"],
-                        dados["banco"],
-                        dados["agencia"],
-                        dados["conta"],
-                        dados["tipo_conta"],
-                        int(dados["data_inicio_fundef"][:4]),
-                        int(dados["data_fim_fundef"][:4]),
-                        dados["data_inicio_fundef"],
-                        dados["data_fim_fundef"],
-                        int(dados["carga_horaria"]),
-                        int(meses_calculados),
-                        1,
-                        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    ),
-                )
-            else:
-                conn.execute(
-                    """
-                    INSERT INTO professores (
-                        nome, cpf, rg, matricula, escola, cargo,
-                        situacao_servidor,
-                        data_admissao, telefone, email, endereco,
-                        banco, agencia, conta, tipo_conta,
-                        data_inicio_fundef, data_fim_fundef,
-                        carga_horaria, quantidade_meses_trabalhados,
-                        aceitou_declaracao, criado_em
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        dados["nome"],
-                        dados["cpf"],
-                        dados["rg"],
-                        dados["matricula"],
-                        dados["escola"],
-                        dados["cargo"],
-                        dados["situacao_servidor"],
-                        dados["data_admissao"],
-                        only_digits(dados["telefone"]),
-                        dados["email"],
-                        dados["endereco"],
-                        dados["banco"],
-                        dados["agencia"],
-                        dados["conta"],
-                        dados["tipo_conta"],
-                        dados["data_inicio_fundef"],
-                        dados["data_fim_fundef"],
-                        int(dados["carga_horaria"]),
-                        int(meses_calculados),
-                        1,
-                        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    ),
-                )
+        # insere via camada de dados
+        payload = dict(dados)
+        payload["telefone"] = only_digits(payload.get("telefone", ""))
+        payload["quantidade_meses_trabalhados"] = int(meses_calculados or 0)
+        payload["aceitou_declaracao"] = 1
+        payload["criado_em"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        db_insert_professor(payload)
 
         flash("Cadastro realizado com sucesso.", "sucesso")
         if rascunho_id is not None:
-            remover_rascunho(rascunho_id)
+            db_remover_rascunho(rascunho_id)
         return redirect(url_for("index"))
 
     rascunho_id = request.args.get("rascunho_id", type=int)
@@ -711,10 +594,13 @@ def cadastro() -> str:
 
 @app.route("/editar/<int:professor_id>", methods=["GET", "POST"])
 def editar(professor_id: int) -> str:
-    with get_connection() as conn:
-        professor = conn.execute(
-            "SELECT * FROM professores WHERE id = ?", (professor_id,)
-        ).fetchone()
+    if USE_FIREBASE:
+        professor = db_get_professor(professor_id)
+    else:
+        with get_connection() as conn:
+            professor = conn.execute(
+                "SELECT * FROM professores WHERE id = ?", (professor_id,)
+            ).fetchone()
 
     if not professor:
         flash("Cadastro não encontrado.", "erro")
@@ -735,13 +621,9 @@ def editar(professor_id: int) -> str:
             dados["quantidade_meses_trabalhados"] = str(meses_calculados)
 
         if not erros:
-            with get_connection() as conn:
-                existente = conn.execute(
-                    "SELECT id FROM professores WHERE cpf = ? AND id <> ?",
-                    (cpf_limpo, professor_id),
-                ).fetchone()
-                if existente:
-                    erros.append("Já existe um cadastro com este CPF.")
+            existente = db_find_professor_by_cpf(cpf_limpo)
+            if existente and int(existente.get("id", 0)) != int(professor_id):
+                erros.append("Já existe um cadastro com este CPF.")
 
         if meses_calculados is None and not erros:
             erros.append("Não foi possível calcular a quantidade de meses trabalhados.")
@@ -756,116 +638,11 @@ def editar(professor_id: int) -> str:
                 professor_id=professor_id,
             )
 
-        with get_connection() as conn:
-            colunas = get_table_columns(conn, "professores")
-            tem_anos_legado = {"ano_inicio_fundef", "ano_fim_fundef"}.issubset(colunas)
-
-            if tem_anos_legado:
-                conn.execute(
-                    """
-                    UPDATE professores
-                    SET
-                        nome = ?,
-                        cpf = ?,
-                        rg = ?,
-                        matricula = ?,
-                        escola = ?,
-                        cargo = ?,
-                        situacao_servidor = ?,
-                        data_admissao = ?,
-                        telefone = ?,
-                        email = ?,
-                        endereco = ?,
-                        banco = ?,
-                        agencia = ?,
-                        conta = ?,
-                        tipo_conta = ?,
-                        ano_inicio_fundef = ?,
-                        ano_fim_fundef = ?,
-                        data_inicio_fundef = ?,
-                        data_fim_fundef = ?,
-                        carga_horaria = ?,
-                        quantidade_meses_trabalhados = ?,
-                        aceitou_declaracao = ?
-                    WHERE id = ?
-                    """,
-                    (
-                        dados["nome"],
-                        dados["cpf"],
-                        dados["rg"],
-                        dados["matricula"],
-                        dados["escola"],
-                        dados["cargo"],
-                        dados["situacao_servidor"],
-                        dados["data_admissao"],
-                        only_digits(dados["telefone"]),
-                        dados["email"],
-                        dados["endereco"],
-                        dados["banco"],
-                        dados["agencia"],
-                        dados["conta"],
-                        dados["tipo_conta"],
-                        int(dados["data_inicio_fundef"][:4]),
-                        int(dados["data_fim_fundef"][:4]),
-                        dados["data_inicio_fundef"],
-                        dados["data_fim_fundef"],
-                        int(dados["carga_horaria"]),
-                        int(meses_calculados),
-                        1,
-                        professor_id,
-                    ),
-                )
-            else:
-                conn.execute(
-                    """
-                    UPDATE professores
-                    SET
-                        nome = ?,
-                        cpf = ?,
-                        rg = ?,
-                        matricula = ?,
-                        escola = ?,
-                        cargo = ?,
-                        situacao_servidor = ?,
-                        data_admissao = ?,
-                        telefone = ?,
-                        email = ?,
-                        endereco = ?,
-                        banco = ?,
-                        agencia = ?,
-                        conta = ?,
-                        tipo_conta = ?,
-                        data_inicio_fundef = ?,
-                        data_fim_fundef = ?,
-                        carga_horaria = ?,
-                        quantidade_meses_trabalhados = ?,
-                        aceitou_declaracao = ?
-                    WHERE id = ?
-                    """,
-                    (
-                        dados["nome"],
-                        dados["cpf"],
-                        dados["rg"],
-                        dados["matricula"],
-                        dados["escola"],
-                        dados["cargo"],
-                        dados["situacao_servidor"],
-                        dados["data_admissao"],
-                        only_digits(dados["telefone"]),
-                        dados["email"],
-                        dados["endereco"],
-                        dados["banco"],
-                        dados["agencia"],
-                        dados["conta"],
-                        dados["tipo_conta"],
-                        dados["data_inicio_fundef"],
-                        dados["data_fim_fundef"],
-                        int(dados["carga_horaria"]),
-                        int(meses_calculados),
-                        1,
-                        professor_id,
-                    ),
-                )
+        payload = dict(dados)
+        payload["telefone"] = only_digits(payload.get("telefone", ""))
+        payload["quantidade_meses_trabalhados"] = int(meses_calculados or 0)
+        payload["aceitou_declaracao"] = 1
+        db_update_professor(professor_id, payload)
 
         flash("Cadastro atualizado com sucesso.", "sucesso")
         return redirect(url_for("index"))
@@ -886,16 +663,11 @@ def editar(professor_id: int) -> str:
 
 @app.route("/deletar/<int:professor_id>", methods=["POST"])
 def deletar(professor_id: int) -> str:
-    with get_connection() as conn:
-        existente = conn.execute(
-            "SELECT id FROM professores WHERE id = ?", (professor_id,)
-        ).fetchone()
-
-        if not existente:
-            flash("Cadastro não encontrado.", "erro")
-            return redirect(url_for("index"))
-
-        conn.execute("DELETE FROM professores WHERE id = ?", (professor_id,))
+    existente = db_get_professor(professor_id)
+    if not existente:
+        flash("Cadastro não encontrado.", "erro")
+        return redirect(url_for("index"))
+    db_delete_professor(professor_id)
 
     flash("Cadastro excluído com sucesso.", "sucesso")
     return redirect(url_for("index"))
@@ -903,16 +675,11 @@ def deletar(professor_id: int) -> str:
 
 @app.route("/rascunho/<int:rascunho_id>/deletar", methods=["POST"])
 def deletar_rascunho(rascunho_id: int) -> str:
-    with get_connection() as conn:
-        existente = conn.execute(
-            "SELECT id FROM rascunhos_professores WHERE id = ?",
-            (rascunho_id,),
-        ).fetchone()
-        if not existente:
-            flash("Rascunho não encontrado.", "erro")
-            return redirect(url_for("index"))
-
-        conn.execute("DELETE FROM rascunhos_professores WHERE id = ?", (rascunho_id,))
+    existente = db_carregar_rascunho(rascunho_id)
+    if not existente:
+        flash("Rascunho não encontrado.", "erro")
+        return redirect(url_for("index"))
+    db_remover_rascunho(rascunho_id)
 
     flash("Rascunho excluído com sucesso.", "sucesso")
     return redirect(url_for("index"))
@@ -925,19 +692,7 @@ def healthz() -> tuple[str, int]:
 
 @app.route("/exportar-csv")
 def exportar_csv() -> Response:
-    with get_connection() as conn:
-        registros = conn.execute(
-            """
-            SELECT
-                id, nome, cpf, rg, matricula, escola, cargo, situacao_servidor,
-                data_admissao, telefone, email, endereco,
-                banco, agencia, conta, tipo_conta,
-                data_inicio_fundef, data_fim_fundef, carga_horaria, quantidade_meses_trabalhados,
-                criado_em
-            FROM professores
-            ORDER BY id DESC
-            """
-        ).fetchall()
+    registros = db_export_professores()
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -956,19 +711,7 @@ def exportar_csv() -> Response:
 
 @app.route("/exportar-excel")
 def exportar_excel() -> Response:
-    with get_connection() as conn:
-        registros = conn.execute(
-            """
-            SELECT
-                id, nome, cpf, rg, matricula, escola, cargo, situacao_servidor,
-                data_admissao, telefone, email, endereco,
-                banco, agencia, conta, tipo_conta,
-                data_inicio_fundef, data_fim_fundef, carga_horaria, quantidade_meses_trabalhados,
-                criado_em
-            FROM professores
-            ORDER BY id DESC
-            """
-        ).fetchall()
+    registros = db_export_professores()
 
     workbook = Workbook()
     sheet = workbook.active
@@ -992,14 +735,7 @@ def exportar_excel() -> Response:
 
 @app.route("/rateio", methods=["GET", "POST"])
 def rateio() -> str:
-    with get_connection() as conn:
-        professores = conn.execute(
-            """
-            SELECT id, nome, cpf, escola, cargo, situacao_servidor, quantidade_meses_trabalhados
-            FROM professores
-            ORDER BY nome ASC
-            """
-        ).fetchall()
+    professores = db_professores_rateio()
 
     dados_form = {
         "valor_total": VALOR_PADRAO_PRECATORIO,
