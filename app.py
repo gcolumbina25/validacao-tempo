@@ -1,6 +1,5 @@
 ﻿from __future__ import annotations
 
-# VERCEL DEPLOYMENT FORCE - Reescrita db_layer.py para lazy loading completo
 import csv
 import io
 import json
@@ -94,13 +93,10 @@ FORM_FIELDS = [
 ]
 
 # camada de dados (SQLite por padrão, Firestore se USE_FIREBASE=1)
-# Importação segura - NUNCA falha mesmo se Firebase tiver problemas
-db_layer_available = False
-try:
-    from db_layer import (
-        USE_FIREBASE,
-        init_db as db_init,
-        list_professores as db_list_professores,
+from db_layer import (
+    USE_FIREBASE,
+    init_db as db_init,
+    list_professores as db_list_professores,
     list_rascunhos as db_list_rascunhos,
     find_professor_by_cpf as db_find_professor_by_cpf,
     get_professor as db_get_professor,
@@ -113,12 +109,6 @@ try:
     export_professores as db_export_professores,
     get_professores_for_rateio as db_professores_rateio,
 )
-    db_layer_available = True
-except Exception as e:
-    # Falha não-fatal - app continua, mas sem db_layer
-    print(f"[WARN] Falha ao importar db_layer: {e}")
-    print(f"[WARN] Aplicação continuará com funcionalidades limitadas")
-    db_layer_available = False
 
 
 def get_connection() -> sqlite3.Connection:
