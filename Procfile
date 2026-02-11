@@ -1,2 +1,1 @@
-# Configuração removida - usar vercel.json para Vercel
-# Este arquivo era para Render. Se precisar voltar para Render, restaure o conteúdo original.
+web: gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 2 wsgi:app
