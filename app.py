@@ -94,10 +94,12 @@ FORM_FIELDS = [
 ]
 
 # camada de dados (SQLite por padrão, Firestore se USE_FIREBASE=1)
-from db_layer import (
-    USE_FIREBASE,
-    init_db as db_init,
-    list_professores as db_list_professores,
+# Importação segura - NUNCA falha mesmo se Firebase tiver problemas
+try:
+    from db_layer import (
+        USE_FIREBASE,
+        init_db as db_init,
+        list_professores as db_list_professores,
     list_rascunhos as db_list_rascunhos,
     find_professor_by_cpf as db_find_professor_by_cpf,
     get_professor as db_get_professor,
@@ -110,6 +112,11 @@ from db_layer import (
     export_professores as db_export_professores,
     get_professores_for_rateio as db_professores_rateio,
 )
+except Exception as e:
+    # Falha silenciosa - continues sem db_layer se houver erro
+    print(f"[ERROR] Falha ao importar db_layer: {e}")
+    import sys
+    sys.exit(1)
 
 
 def get_connection() -> sqlite3.Connection:
