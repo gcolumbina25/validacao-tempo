@@ -11,6 +11,15 @@ from typing import Any
 # Vercel sobrescreve com USE_FIREBASE=1 via vercel.json
 USE_FIREBASE = os.environ.get("USE_FIREBASE", "0") == "1"
 
+# Importar firebase no nível global se necessário
+firestore = None
+if USE_FIREBASE:
+    try:
+        from firebase_admin import firestore as fs
+        firestore = fs
+    except ImportError:
+        pass
+
 # GLOBAL STATE - SAFE INITIALIZATION
 _firebase_available = False
 _firebase_app = None
