@@ -1,0 +1,21 @@
+DEPLOYMENT TRIGGER - 2025-02-11
+================================
+
+Este arquivo foi criado para forçar um novo deploy no Vercel.
+
+MUDANÇAS IMPLEMENTADAS:
+1. db_layer.py: Reescrito com lazy loading TOTAL
+   - _safely_initialize_firebase() nunca falha no import
+   - Deferring de toda inicialização Firebase até primeiro acesso
+   - Proxy transparente (_DBProxy) para acesso ao cliente
+
+2. Credenciais: Base64 codificadas em vercel.json
+   - FIREBASE_CREDENTIALS_JSON preenchido com credenciais completas
+   - Suporte para arquivo local + ambiente variables
+
+3. Tratamento de erros robusto
+   - Nenhuma exceção durante import
+   - Fallback para SQLite se Firebase falhar
+   - Logging detalhado com [Firebase] prefix
+
+TIMESTAMP: 2025-02-11T12:00:00
