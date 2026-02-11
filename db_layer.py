@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import os
+import json
+import base64
+import tempfile
 from datetime import datetime
 from typing import Any
 
@@ -8,91 +11,146 @@ from typing import Any
 # Vercel sobrescreve com USE_FIREBASE=1 via vercel.json
 USE_FIREBASE = os.environ.get("USE_FIREBASE", "0") == "1"
 
-if USE_FIREBASE:
-    import firebase_admin
-    from firebase_admin import credentials, firestore
-    import json
-    import tempfile
-    import base64
+# GLOBAL STATE - SAFE INITIALIZATION
+_firebase_available = False
+_firebase_app = None
+_db_instance = None
+_initialization_attempted = False
+_last_error = None
 
-    cred = None
-    firebase_initialized = False
-    _db_instance = None
+def _safely_initialize_firebase():
+    """
+    Tenta inicializar Firebase de forma SEGURA - NUNCA lança exceção.
+    Retorna True/False indicando sucesso, não lança exceções.
+    """
+    global _firebase_available, _firebase_app, _db_instance, _initialization_attempted, _last_error
     
-    # Tenta carregar credenciais de arquivo (local dev)
-    cred_path = os.environ.get("FIREBASE_CREDENTIALS")
-    if cred_path and os.path.isfile(cred_path):
-        try:
-            cred = credentials.Certificate(cred_path)
-            print("[Firebase] Credenciais carregadas de arquivo local")
-        except Exception as e:
-            print(f"[Firebase] Erro ao carregar credenciais de arquivo: {e}")
+    if _initialization_attempted:
+        return _firebase_available
     
-    # Tenta carregar credenciais de variável JSON ou base64 (Vercel/prod)
-    if not cred:
-        cred_json = os.environ.get("FIREBASE_CREDENTIALS_JSON")
-        if cred_json:
+    _initialization_attempted = True
+    
+    if not USE_FIREBASE:
+        print("[DB] Usando SQLite (USE_FIREBASE=0)")
+        return False
+    
+    try:
+        import firebase_admin
+        from firebase_admin import credentials, firestore
+    except ImportError as e:
+        _last_error = f"[Firebase] Importação falhou: {e}"
+        print(_last_error)
+        return False
+    
+    try:
+        cred = None
+        
+        # 1. Tentar arquivo local de credenciais
+        cred_path = os.environ.get("FIREBASE_CREDENTIALS")
+        if cred_path and os.path.isfile(cred_path):
             try:
-                # Tenta decodificar como base64 primeiro
-                try:
-                    decoded = base64.b64decode(cred_json).decode('utf-8')
-                    cred_dict = json.loads(decoded)
-                    print("[Firebase] Credenciais decodificadas de base64 com sucesso")
-                except Exception as be:
-                    print(f"[Firebase] Base64 decode falhou: {be}, tentando JSON direto...")
-                    # Se falhar, tenta direto como JSON
-                    cred_dict = json.loads(cred_json)
-                    print("[Firebase] Credenciais carregadas como JSON direto")
-                
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-                    json.dump(cred_dict, f)
-                    temp_cred_path = f.name
-                    print(f"[Firebase] Credenciais salvas em temp file: {temp_cred_path}")
-                cred = credentials.Certificate(temp_cred_path)
-                print("[Firebase] Credenciais de certificado criadas com sucesso")
-            except (json.JSONDecodeError, ValueError, base64.binascii.Error, Exception) as e:
-                print(f"[Firebase] ERRO ao decodificar FIREBASE_CREDENTIALS_JSON: {type(e).__name__}: {e}")
-                cred = None
-    
-    # Se nenhuma credencial explícita, tenta Application Default Credentials
-    if cred:
-        try:
-            firebase_admin.initialize_app(cred)
-            firebase_initialized = True
-            print("[Firebase] Aplicativo inicializado com credenciais fornecidas")
-        except ValueError as e:
-            print(f"[Firebase] Erro ao inicializar com credenciais: {e}")
-            firebase_initialized = False
-    else:
-        try:
-            firebase_admin.initialize_app()
-            firebase_initialized = True
-            print("[Firebase] Aplicativo inicializado com Application Default Credentials")
-        except Exception as e:
-            print(f"[Firebase] Erro ao inicializar: {e}")
-            firebase_initialized = False
-
-    # Lazy-load do cliente Firestore para evitar falhas durante import
-    def get_db():
-        """Retorna o cliente Firestore de forma preguiçosa"""
-        global _db_instance
-        if _db_instance is None:
-            if not firebase_initialized:
-                raise RuntimeError("[Firebase] Firebase não foi inicializado com sucesso. Verifique as credenciais.")
-            try:
-                _db_instance = firestore.client()
-                print("[Firebase] Cliente Firestore criado com sucesso")
+                cred = credentials.Certificate(cred_path)
+                print("[Firebase] ✓ Credenciais carregadas do arquivo local")
             except Exception as e:
-                print(f"[Firebase] Erro ao criar cliente Firestore: {e}")
-                raise
-        return _db_instance
+                print(f"[Firebase] Arquivo local falhou: {e}")
+        
+        # 2. Tentar FIREBASE_CREDENTIALS_JSON (base64 ou JSON)
+        if not cred:
+            cred_json = os.environ.get("FIREBASE_CREDENTIALS_JSON", "").strip()
+            if cred_json:
+                try:
+                    # Tentar base64 primeiro
+                    try:
+                        decoded = base64.b64decode(cred_json).decode('utf-8')
+                        cred_dict = json.loads(decoded)
+                        print("[Firebase] ✓ Credenciais decodificadas de base64")
+                    except:
+                        # Falhou - tentar JSON direto
+                        cred_dict = json.loads(cred_json)
+                        print("[Firebase] ✓ Credenciais carregadas como JSON")
+                    
+                    # Salvar em temp file (firebase_admin precisa de arquivo)
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                        json.dump(cred_dict, f)
+                        temp_path = f.name
+                    
+                    cred = credentials.Certificate(temp_path)
+                except Exception as e:
+                    print(f"[Firebase] FIREBASE_CREDENTIALS_JSON falhou: {e}")
+        
+        # 3. Tentar Application Default Credentials
+        if not cred:
+            try:
+                cred = credentials.ApplicationDefaultCredentials()
+                print("[Firebase] ✓ Usando Application Default Credentials")
+            except Exception as e:
+                print(f"[Firebase] Application Default Credentials falhou: {e}")
+        
+        # 4. Inicializar app Firebase
+        if cred:
+            try:
+                # Verificar se já foi inicializado
+                try:
+                    _firebase_app = firebase_admin.get_app()
+                    print("[Firebase] ✓ App já estava inicializado")
+                except ValueError:
+                    # Primeira vez - inicializar
+                    _firebase_app = firebase_admin.initialize_app(cred)
+                    print("[Firebase] ✓ App inicializado com credenciais")
+                
+                # Testar conexão criando cliente
+                from firebase_admin import firestore as fs_module
+                test_client = fs_module.client()
+                _db_instance = test_client
+                _firebase_available = True
+                print("[Firebase] ✓ Cliente Firestore funcionando")
+                return True
+            except Exception as e:
+                _last_error = f"[Firebase] Erro ao inicializar app: {e}"
+                print(_last_error)
+                return False
+        else:
+            _last_error = "[Firebase] ERRO: Nenhuma credencial disponível"
+            print(_last_error)
+            return False
     
-    # Alias 'db' que será criado sob demanda
-    class _DBProxy:
-        def __getattr__(self, name):
-            return getattr(get_db(), name)
+    except Exception as e:
+        _last_error = f"[Firebase] Erro inesperado: {e}"
+        print(_last_error)
+        return False
+
+def get_db():
+    """
+    Obtém cliente Firestore com lazy loading. 
+    Retorna proxy ou None se Firebase indisponível.
+    """
+    global _db_instance
     
-    db = _DBProxy()
+    if not _safely_initialize_firebase():
+        return None
+    
+    if _db_instance is None:
+        try:
+            from firebase_admin import firestore
+            _db_instance = firestore.client()
+        except Exception as e:
+            print(f"[Firebase] Erro ao obter cliente: {e}")
+            return None
+    
+    return _db_instance
+
+class _DBProxy:
+    """Proxy que defer inicialização do Firebase para primeiro acesso."""
+    def __getattr__(self, name):
+        client = get_db()
+        if client is None:
+            # Firebase indisponível - retornar stub
+            print(f"[DB] Firebase indisponível, atributo '{name}' não pode ser acessado")
+            return None
+        return getattr(client, name)
+
+# Inicializar proxy
+db = _DBProxy()
 
 
 def _now_str() -> str:

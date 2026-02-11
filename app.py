@@ -1,6 +1,6 @@
 ﻿from __future__ import annotations
 
-# Build trigger - with lazy loading + credentials
+# VERCEL DEPLOYMENT FORCE - Reescrita db_layer.py para lazy loading completo
 import csv
 import io
 import json
