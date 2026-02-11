@@ -9,3 +9,5 @@ dist/
 dados/*.db
 dados/*.sqlite
 dados/*.sqlite3
+.vercel
+.env*.local
