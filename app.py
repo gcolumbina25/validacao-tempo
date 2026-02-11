@@ -95,6 +95,7 @@ FORM_FIELDS = [
 
 # camada de dados (SQLite por padrão, Firestore se USE_FIREBASE=1)
 # Importação segura - NUNCA falha mesmo se Firebase tiver problemas
+db_layer_available = False
 try:
     from db_layer import (
         USE_FIREBASE,
@@ -112,11 +113,12 @@ try:
     export_professores as db_export_professores,
     get_professores_for_rateio as db_professores_rateio,
 )
+    db_layer_available = True
 except Exception as e:
-    # Falha silenciosa - continues sem db_layer se houver erro
-    print(f"[ERROR] Falha ao importar db_layer: {e}")
-    import sys
-    sys.exit(1)
+    # Falha não-fatal - app continua, mas sem db_layer
+    print(f"[WARN] Falha ao importar db_layer: {e}")
+    print(f"[WARN] Aplicação continuará com funcionalidades limitadas")
+    db_layer_available = False
 
 
 def get_connection() -> sqlite3.Connection:
